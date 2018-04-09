@@ -16,11 +16,10 @@ public class Utils {
         }
     }
 
-    public static double depositValue(BigInteger value, int decimal){
-
+    public static BigDecimal valueTransfer(BigInteger value, int decimal){
         BigDecimal deposit ;
         BigDecimal d = new BigDecimal(value);
         deposit = d.divide(BigDecimal.valueOf(10).pow(decimal));
-        return deposit.doubleValue();
+        return deposit;
     }
 }

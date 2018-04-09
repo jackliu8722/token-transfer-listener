@@ -4,6 +4,11 @@ import com.ethereum.token.transfer.listener.contract.TOKEN;
 import com.ethereum.token.transfer.listener.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.web3j.abi.FunctionEncoder;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.Type;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
@@ -15,6 +20,7 @@ import org.web3j.tx.TransactionManager;
 import org.web3j.utils.Numeric;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
 
@@ -179,13 +185,15 @@ public class Web3jService {
             inputData.setFrom(from);
 
             int decimal = getDecimal(to);
-            double value = Utils.depositValue(inputData.getValue(),decimal);
+            BigDecimal value = Utils.valueTransfer(inputData.getValue(),decimal);
             log.info("transfer token transaction:{From: " + from +
                     ",To: " + inputData.getTo() +
-                    ",Value: " + value +
+                    ",Value: " + value.doubleValue() +
                     ",Hash: " + tx.getHash() +
                     ",ContractAddress: " + to + "}");
-            callBack.callBack(from,inputData.getTo(),value,timestamp);
+            BigDecimal fromValue = Utils.valueTransfer(balanceOf(from),decimal);
+            BigDecimal toValue = Utils.valueTransfer(balanceOf(inputData.getTo()),decimal);
+            callBack.callBack(from,inputData.getTo(),value,timestamp,fromValue,toValue,tx.getHash());
         }
     }
 
@@ -205,5 +213,29 @@ public class Web3jService {
             }
         }
         return false;
+    }
+
+    private BigInteger balanceOf(String addr){
+        int times = 0;
+        BigInteger value = BigInteger.valueOf(0);
+        while(times++ < retryTimes) {
+            try {
+                Address addressA = new Address(addr);
+                Function function = new Function("balanceOf", Arrays.<Type>asList(addressA), Collections.<TypeReference<?>>emptyList());
+                String dataHex = FunctionEncoder.encode(function);
+                org.web3j.protocol.core.methods.request.Transaction transaction = org.web3j.protocol.core.methods.request.Transaction.createEthCallTransaction(addr, contractAddress, dataHex);
+
+                org.web3j.protocol.core.methods.response.EthCall ethCall = web3.ethCall(transaction, DefaultBlockParameter.valueOf(nextBlockNumber)).send();
+                String val = ethCall.getValue();
+                if (value.equals("0x")) {
+                    val = "0x0";
+                }
+                return  Numeric.toBigInt(val);
+            } catch (Exception e) {
+                log.error("balanceOf error",e);
+                Utils.sleep(100);
+            }
+        }
+        return value;
     }
 }
