@@ -13,3 +13,11 @@ Token transfer listener
        });
 
 ```
+
+The parameters of the init method are described as follows:
+* startBlockNumber The block number that starts to synchronize.
+* String url The url of the geth, eg. http:127.0.0.1:8545.
+* String contractAddress The address of the token.
+* int retryTimes RPC request repeat times.
+
+
