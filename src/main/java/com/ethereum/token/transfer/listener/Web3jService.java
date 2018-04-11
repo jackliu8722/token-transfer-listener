@@ -95,11 +95,12 @@ public class Web3jService {
                     });
                 });
                 try {
-                    latch.wait();
+                    latch.await();
                 } catch (InterruptedException e) {
                     log.warn("",e);
                 }
                 log.info("----Completed handle block number = " + nextBlockNumber.intValue());
+                System.out.println(new Date() +  "----Completed handle block number = " + nextBlockNumber.intValue());
                 nextBlockNumber = nextBlockNumber.add(BigInteger.valueOf(1));
             } catch (IOException e) {
                 log.error("",e);
