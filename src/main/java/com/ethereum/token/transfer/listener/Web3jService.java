@@ -23,6 +23,10 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.web3j.tx.ManagedTransaction.GAS_PRICE;
 
@@ -42,7 +46,9 @@ public class Web3jService {
 
     private int retryTimes;
 
-    public void init(long startBlockNumber,String url,String contractAddress,int retryTimes) {
+    private ExecutorService executor;
+
+    public void init(long startBlockNumber,String url,String contractAddress,int retryTimes,int threadNumber) {
 
         this.contractAddress = contractAddress.toLowerCase();
         web3 = Web3j.build(new HttpService(url));
@@ -50,6 +56,7 @@ public class Web3jService {
         nextBlockNumber = BigInteger.valueOf(startBlockNumber);
         this.retryTimes = retryTimes;
         token = createToken(contractAddress);
+        executor = Executors.newFixedThreadPool(threadNumber);
     }
 
     private TOKEN createToken(String addr){
@@ -79,10 +86,19 @@ public class Web3jService {
             Request<?,EthBlock> ethBlock = web3.ethGetBlockByNumber(DefaultBlockParameter.valueOf(nextBlockNumber),true);
             try {
                 EthBlock.Block block = ethBlock.send().getBlock();
+                final CountDownLatch latch = new CountDownLatch(block.getTransactions().size());
                 block.getTransactions().forEach(t -> {
                     Transaction tx = (Transaction)t.get();
-                    handleTx(tx,block.getTimestamp().longValue(),callBack);
+                    executor.submit(() -> {
+                        handleTx(tx,block.getTimestamp().longValue(),callBack,nextBlockNumber);
+                        latch.countDown();
+                    });
                 });
+                try {
+                    latch.wait();
+                } catch (InterruptedException e) {
+                    log.warn("",e);
+                }
                 log.info("----Completed handle block number = " + nextBlockNumber.intValue());
                 nextBlockNumber = nextBlockNumber.add(BigInteger.valueOf(1));
             } catch (IOException e) {
@@ -161,7 +177,7 @@ public class Web3jService {
         return null;
     }
 
-    private void handleTx(Transaction tx ,long timestamp,ICallBack callBack) {
+    private void handleTx(Transaction tx ,long timestamp,ICallBack callBack,BigInteger blockNumber) {
         String from = tx.getFrom();
         String to = tx.getTo();
         if(to == null){
@@ -191,8 +207,8 @@ public class Web3jService {
                     ",Value: " + value.doubleValue() +
                     ",Hash: " + tx.getHash() +
                     ",ContractAddress: " + to + "}");
-            BigDecimal fromValue = Utils.valueTransfer(balanceOf(from),decimal);
-            BigDecimal toValue = Utils.valueTransfer(balanceOf(inputData.getTo()),decimal);
+            BigDecimal fromValue = Utils.valueTransfer(balanceOf(from,blockNumber),decimal);
+            BigDecimal toValue = Utils.valueTransfer(balanceOf(inputData.getTo(),blockNumber),decimal);
             callBack.callBack(from,inputData.getTo(),value,timestamp,fromValue,toValue,tx.getHash());
         }
     }
@@ -215,7 +231,7 @@ public class Web3jService {
         return false;
     }
 
-    public BigInteger balanceOf(String addr){
+    public BigInteger balanceOf(String addr,BigInteger blockNumber){
         int times = 0;
         BigInteger value = BigInteger.valueOf(0);
         while(times++ < retryTimes) {
@@ -225,7 +241,7 @@ public class Web3jService {
                 String dataHex = FunctionEncoder.encode(function);
                 org.web3j.protocol.core.methods.request.Transaction transaction = org.web3j.protocol.core.methods.request.Transaction.createEthCallTransaction(addr, contractAddress, dataHex);
 
-                org.web3j.protocol.core.methods.response.EthCall ethCall = web3.ethCall(transaction, DefaultBlockParameter.valueOf(nextBlockNumber)).send();
+                org.web3j.protocol.core.methods.response.EthCall ethCall = web3.ethCall(transaction, DefaultBlockParameter.valueOf(blockNumber)).send();
                 String val = ethCall.getValue();
                 if (val == null || val.equals("0x")) {
                     val = "0x0";
