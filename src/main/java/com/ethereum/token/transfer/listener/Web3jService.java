@@ -215,7 +215,7 @@ public class Web3jService {
         return false;
     }
 
-    private BigInteger balanceOf(String addr){
+    public BigInteger balanceOf(String addr){
         int times = 0;
         BigInteger value = BigInteger.valueOf(0);
         while(times++ < retryTimes) {
@@ -227,7 +227,7 @@ public class Web3jService {
 
                 org.web3j.protocol.core.methods.response.EthCall ethCall = web3.ethCall(transaction, DefaultBlockParameter.valueOf(nextBlockNumber)).send();
                 String val = ethCall.getValue();
-                if (value.equals("0x")) {
+                if (val == null || val.equals("0x")) {
                     val = "0x0";
                 }
                 return  Numeric.toBigInt(val);
